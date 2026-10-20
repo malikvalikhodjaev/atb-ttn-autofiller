@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.artifact-build/
+.venv/
+/config.local.json
+/config.local.json.tmp
+/materials/
+/outputs/
+/dist/
+.env
+.env.*
+*.pfx
+*.p12
+*.key
+browser-profile/
+sessions/

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>ТТН — список счетов-фактур</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="workspace">
+    <header class="page-header">
+      <div><p class="eyebrow">Документы и доставка</p><h1>Подготовка СФ к ТТН</h1>
+      <p class="description">Загрузите свой список, проверьте строки и сохраните результат.</p></div>
+      <div class="connections" aria-label="Подключение систем">
+        <span>Didox: <strong>не подключён</strong></span>
+        <span>Smartup: <strong>не подключён</strong></span>
+      </div>
+    </header>
+
+    <details class="settings-card" id="settings-card">
+      <summary>Настройка при передаче</summary>
+      <p class="muted">Укажите ссылки для входа и единый адрес погрузки. Подключение систем ещё предстоит реализовать.</p>
+      <form id="settings-form">
+        <div class="settings-grid">
+          <label for="didox-url">«Ссылка Didox»<input id="didox-url" type="url" maxlength="2000" value="https://didox.uz/" required></label>
+          <label for="smartup-url">«Ссылка Smartup»<input id="smartup-url" type="url" maxlength="2000"></label>
+          <label for="company-tin">«ИНН организации»<input id="company-tin" type="text" inputmode="numeric" maxlength="9"></label>
+          <label for="loading-address">«Адрес погрузки»<input id="loading-address" type="text" maxlength="500"></label>
+        </div>
+        <div class="settings-actions">
+          <button id="save-settings" class="secondary" type="submit">Сохранить настройки</button>
+          <a id="open-didox" href="https://didox.uz/" target="_blank" rel="noopener noreferrer">Открыть Didox</a>
+          <a id="open-smartup" target="_blank" rel="noopener noreferrer" hidden>Открыть Smartup</a>
+        </div>
+        <p class="muted" id="settings-message" role="status" aria-live="polite">Настройки сохраняются на этом компьютере. Авторизация и ЭЦП выполняются отдельно.</p>
+      </form>
+    </details>
+
+    <section class="upload-card" aria-labelledby="upload-title">
+      <div class="upload-copy"><h2 id="upload-title">Какие СФ обработать?</h2>
+        <p>Одна строка Excel соответствует одной СФ. В обработку входит только ваш список.</p>
+        <p class="muted">Заполните «ID СФ» или вместе «Номер СФ», «Дата СФ» и «ИНН клиента».</p>
+      </div>
+      <div class="upload-controls" id="drop-zone">
+        <input id="file-input" class="visually-hidden" type="file" accept=".xlsx,.csv" aria-label="Файл со списком СФ">
+        <button id="choose-file" type="button" class="primary">Загрузить Excel или CSV</button>
+        <span class="muted">Можно перетащить файл сюда. До 15 МБ.</span>
+        <a href="/api/template" download="sf_upload_template.xlsx">Скачать пустой шаблон Excel</a>
+      </div>
+    </section>
+
+    <div id="message" role="status" aria-live="polite" hidden></div>
+    <section id="sheet-picker" class="sheet-picker" hidden>
+      <label for="sheet-select">Выберите лист со списком СФ</label>
+      <select id="sheet-select"></select>
+      <button id="load-sheet" type="button" class="secondary">Открыть лист</button>
+    </section>
+
+    <section class="summary" aria-label="Результат проверки">
+      <div><span>Всего СФ</span><strong id="count-total">0</strong></div>
+      <div><span>Список проверен</span><strong id="count-ready">0</strong></div>
+      <div><span>Нужно исправить</span><strong id="count-attention">0</strong></div>
+      <div><span>Повторы</span><strong id="count-duplicates">0</strong></div>
+    </section>
+
+    <section class="list-card" aria-labelledby="list-title">
+      <div class="list-heading"><div><h2 id="list-title">Список счетов-фактур</h2>
+        <p id="source-label" class="muted">Файл ещё не загружен.</p></div>
+        <div class="file-actions"><button id="new-list" type="button" class="text-button" disabled>Новый список</button>
+          <button id="validate" type="button" class="secondary" disabled>Проверить изменения</button></div>
+      </div>
+      <div class="list-toolbar">
+        <div class="filters" role="group" aria-label="Показать строки">
+          <button type="button" data-filter="all" class="active" aria-pressed="true">Все</button>
+          <button type="button" data-filter="ready" aria-pressed="false">Проверенные</button>
+          <button type="button" data-filter="attention" aria-pressed="false">На исправление</button>
+          <button type="button" data-filter="duplicate" aria-pressed="false">Повторы</button>
+        </div>
+        <span id="selection-label" class="muted">Выбрано: 0</span>
+      </div>
+      <div id="empty-state" class="empty-state"><div class="sheet-symbol" aria-hidden="true">СФ</div>
+        <h3>Начните с загрузки списка</h3><p>Здесь появятся счета-фактуры и результат проверки каждой строки.</p></div>
+      <div id="table-wrapper" class="table-wrapper" hidden>
+        <table><thead><tr>
+          <th class="select-column"><input id="select-all" type="checkbox" aria-label="Выбрать все проверенные СФ"></th>
+          <th>Строка</th><th>«ID СФ»</th><th>«Номер СФ»</th><th>«Дата СФ»</th>
+          <th>«ИНН клиента»</th><th>«Комментарий»</th><th>Проверка списка</th>
+        </tr></thead><tbody id="invoice-rows"></tbody></table>
+      </div>
+      <div id="pagination" class="pagination" hidden><span id="page-label" class="muted"></span>
+        <div><button id="previous-page" type="button" class="secondary">Назад</button>
+        <button id="next-page" type="button" class="secondary">Далее</button></div></div>
+      <div class="export-actions">
+        <button id="export-report" type="button" class="secondary" disabled>Скачать отчёт</button>
+        <button id="export-list" type="button" class="secondary" disabled>Скачать выбранный список</button>
+        <button type="button" class="primary" disabled title="Потребуется подключение Didox и Smartup">Создать черновики ТТН</button>
+      </div>
+    </section>
+
+    <aside class="mode-note"><strong>Сейчас доступна подготовка списка.</strong>
+      Загрузка и исправление строк работают локально. Создание ТТН станет доступно после подключения Didox и Smartup.</aside>
+    <footer>Исходный файл остаётся без изменений. Отчёт сохраняется отдельно. Исправления в окне можно сохранить кнопкой «Скачать выбранный список».</footer>
+  </main>
+</body>
+</html>
