@@ -8,7 +8,8 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = "ttn-processor-0.1.1"
 FILES = (
-    ".gitignore", "README.md", "README.txt", "RUNBOOK.txt", "HANDOFF.md",
+    ".gitignore", "README.md", "README.txt", "RUNBOOK.txt", "HANDOFF.md", "INTEGRATION.md",
+    "examples/README.md", "examples/sf_demo.csv",
     "app.py", "invoice_processor.py", "settings.py", "start.cmd", "check.cmd",
     "config.example.json", "web/index.html", "web/styles.css", "web/app.js",
     "templates/sf_upload_template.xlsx", "tests/test_processor.py",
