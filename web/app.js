@@ -14,6 +14,7 @@ function showMessage(text, kind = '') {
 }
 
 function displaySettings(settings) {
+  state.settings = settings;
   el('didox-url').value = settings.didox_url;
   el('smartup-url').value = settings.smartup_url;
   el('company-tin').value = settings.company_tin;
@@ -22,6 +23,7 @@ function displaySettings(settings) {
   el('open-smartup').hidden = !settings.smartup_url;
   if (settings.smartup_url) el('open-smartup').href = settings.smartup_url;
   else el('open-smartup').removeAttribute('href');
+  if (typeof displayApiSettings === 'function') displayApiSettings(settings);
 }
 
 async function loadSettings() {
@@ -40,13 +42,15 @@ async function saveSettings(event) {
   const controls = [...el('settings-form').querySelectorAll('input,button')];
   controls.forEach(control => {control.disabled = true;});
   try {
-    const settings = {schema_version: 1, didox_url: el('didox-url').value, smartup_url: el('smartup-url').value,
-      company_tin: el('company-tin').value, loading_address: el('loading-address').value};
+    const settings = {...(state.settings || {}), schema_version: 2, didox_url: el('didox-url').value, smartup_url: el('smartup-url').value,
+      company_tin: el('company-tin').value, loading_address: el('loading-address').value,
+      ...(typeof readApiSettings === 'function' ? readApiSettings() : {})};
     const response = await fetch('/api/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({settings})});
     if (!response.ok) await apiError(response);
     displaySettings((await response.json()).settings);
     el('settings-message').classList.remove('error');
-    el('settings-message').textContent = 'Настройки сохранены в «config.local.json». Ссылки можно открыть для входа. Получение данных и создание ТТН ещё требуют подключения.';
+    el('settings-message').textContent = 'Настройки сохранены. Выполните вход и проверку доступов; после изменения справочников подготовьте СФ заново.';
+    if (typeof refreshConnectionStatus === 'function') await refreshConnectionStatus();
   } catch (error) {
     el('settings-message').textContent = error.message;
     el('settings-message').classList.add('error');
@@ -77,6 +81,7 @@ function updateActions() {
   const ready = state.rows.filter(row => row.status === 'ready');
   el('select-all').checked = ready.length > 0 && ready.every(row => state.selected.has(row.record_id));
   el('select-all').indeterminate = state.selected.size > 0 && !el('select-all').checked;
+  if (typeof updateIntegrationActions === 'function') updateIntegrationActions();
 }
 
 function dirty() {
@@ -105,7 +110,7 @@ function render() {
   el('count-attention').textContent = counts.attention;
   el('count-attention').classList.toggle('attention', counts.attention > 0);
   el('count-duplicates').textContent = counts.duplicate;
-  el('source-label').textContent = state.source ? `Файл: «${state.source.file_name}». Лист: «${state.source.sheet}».` : 'Файл ещё не загружен.';
+  el('source-label').textContent = state.source ? (state.source.origin === 'didox' ? state.source.description : `Файл: «${state.source.file_name}». Лист: «${state.source.sheet}».`) : 'Список ещё не загружен.';
   const visible = filteredRows();
   state.page = Math.max(0, Math.min(state.page, Math.ceil(visible.length / pageSize) - 1));
   const start = state.page * pageSize;
@@ -210,10 +215,11 @@ async function importFile(file, sheet = '') {
     const data = await response.json();
     state.rows = data.rows;
     state.source = data.source;
+    if (typeof resetInvoiceSearch === 'function') resetInvoiceSearch();
     state.dirty = false;
     state.page = 0;
     state.selected = new Set(data.rows.filter(row => row.status === 'ready').map(row => row.record_id));
-    if (data.rows.length) showMessage(`Список загружен. СФ: ${data.summary.total}. Проверено: ${data.summary.ready}. ТТН пока не создавались.`);
+    if (data.rows.length) showMessage(`Список загружен. СФ: ${data.summary.total}. Проверено: ${data.summary.ready}. Загрузка списка не создаёт ТТН.`);
     else showMessage('Файл прочитан, но заполненных строк СФ нет. Внесите свой список в шаблон и загрузите файл снова.', 'warning');
     render();
   } catch (error) {
@@ -284,6 +290,7 @@ el('next-page').addEventListener('click', () => {state.page += 1; render();});
 el('new-list').addEventListener('click', () => {
   state.rows = []; state.source = null; state.selected.clear(); state.dirty = false; state.file = null;
   el('file-input').value = ''; el('sheet-picker').hidden = true; showMessage(''); render();
+  if (typeof resetInvoiceSearch === 'function') resetInvoiceSearch();
 });
 ['dragover', 'dragenter'].forEach(name => el('drop-zone').addEventListener(name, event => {
   event.preventDefault(); if (!state.busy) el('drop-zone').classList.add('dragging');

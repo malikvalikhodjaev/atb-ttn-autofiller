@@ -30,6 +30,27 @@ p { line-height: 1.55; margin: 4px 0; }
 .settings-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 17px; margin-top: 16px; font-size: 13px; }
 #settings-message { font-size: 12px; margin-top: 12px; overflow-wrap: anywhere; }
 #settings-message.error { color: #9a3b32; }
+textarea { font: 12px/1.5 Consolas, monospace; color: #263b57; background: #fffdf5; border: 1px solid #d3dce7; border-radius: 6px; padding: 12px; width: 100%; resize: vertical; }
+.settings-grid select { width: 100%; padding: 9px; border: 1px solid #d3dce7; border-radius: 6px; background: white; color: #243145; }
+.reference-details { margin-top: 17px; }
+.reference-details textarea { margin-top: 12px; }
+.file-label { font-size: 12px; color: #56667b; display: flex; flex-direction: column; gap: 8px; }
+.integration-card { margin-top: 22px; }
+.integration-note { margin: 0 23px 17px; color: #805b28; font-size: 13px; }
+.ttn-jobs { padding: 0 23px; }
+.ttn-job { border: 1px solid #dfe6ef; border-radius: 9px; padding: 15px; margin-bottom: 14px; }
+.ttn-job-header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.ttn-job-header strong { color: #29486e; }
+.ttn-job details { margin-top: 12px; }
+.ttn-job textarea { margin-top: 10px; }
+.ttn-job ul { font-size: 12px; line-height: 1.6; color: #8b4437; padding-left: 19px; }
+.ttn-job .job-warning { color: #806527; }
+.ttn-job .job-error { color: #9a3b32; font-size: 13px; overflow-wrap: anywhere; }
+.job-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 11px; font-size: 12px; }
+.review-confirm { padding: 12px 23px 17px; font-size: 13px; }
+.review-confirm input { vertical-align: middle; margin: 0 7px 0 0; }
+#prepare-results { padding: 0 23px; font-size: 13px; }
+#prepare-results > div { margin: 8px 0; padding: 10px; background: #fff7e7; border-radius: 6px; }
 .upload-card, .list-card { background: white; border: 1px solid #e0e6ef; border-radius: 13px; box-shadow: 0 3px 12px #1b365509; }
 .upload-card { display: flex; justify-content: space-between; gap: 28px; align-items: center; padding: 25px; }
 .upload-copy { max-width: 780px; }

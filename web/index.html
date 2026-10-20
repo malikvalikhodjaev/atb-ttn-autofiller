@@ -7,6 +7,7 @@
   <title>ТТН — список счетов-фактур</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
+  <script src="/integration.js" defer></script>
 </head>
 <body>
   <main class="workspace">
@@ -14,20 +15,28 @@
       <div><p class="eyebrow">Документы и доставка</p><h1>Подготовка СФ к ТТН</h1>
       <p class="description">Загрузите свой список, проверьте строки и сохраните результат.</p></div>
       <div class="connections" aria-label="Подключение систем">
-        <span>Didox: <strong>не подключён</strong></span>
-        <span>Smartup: <strong>не подключён</strong></span>
+        <span>Didox: <strong id="didox-status">не подключён</strong></span>
+        <span>Smartup: <strong id="smartup-status">не подключён</strong></span>
       </div>
     </header>
 
     <details class="settings-card" id="settings-card">
-      <summary>Настройка при передаче</summary>
-      <p class="muted">Укажите ссылки для входа и единый адрес погрузки. Подключение систем ещё предстоит реализовать.</p>
+      <summary>Настройки подключения и справочники</summary>
+      <p class="muted">Сохраните API-адреса, организацию и адрес погрузки. Доступы вводятся отдельно и хранятся в памяти до остановки программы.</p>
       <form id="settings-form">
         <div class="settings-grid">
           <label for="didox-url">«Ссылка Didox»<input id="didox-url" type="url" maxlength="2000" value="https://didox.uz/" required></label>
           <label for="smartup-url">«Ссылка Smartup»<input id="smartup-url" type="url" maxlength="2000"></label>
           <label for="company-tin">«ИНН организации»<input id="company-tin" type="text" inputmode="numeric" maxlength="9"></label>
           <label for="loading-address">«Адрес погрузки»<input id="loading-address" type="text" maxlength="500"></label>
+          <label for="didox-api-url">«API Didox»<input id="didox-api-url" type="url" value="https://api-partners.didox.uz" required></label>
+          <label for="smartup-api-url">«API Smartup»<input id="smartup-api-url" type="url" value="https://smartup.online" required></label>
+          <label for="smartup-project">«project_code»<input id="smartup-project" type="text" value="trade" maxlength="100"></label>
+          <label for="smartup-filial">«filial_id»<input id="smartup-filial" type="text" maxlength="100"></label>
+          <label for="smartup-filial-code">«filial_code», если нужен<input id="smartup-filial-code" type="text" maxlength="100"></label>
+          <label for="loading-region">«Регион погрузки»<select id="loading-region"><option value="">Выберите после загрузки справочников</option></select></label>
+          <label for="loading-district">«Район погрузки»<select id="loading-district"><option value="">Выберите район</option></select></label>
+          <label for="warehouse-select">«Склад Didox», если нужен<select id="warehouse-select"><option value="">Выберите склад после подключения</option></select></label>
         </div>
         <div class="settings-actions">
           <button id="save-settings" class="secondary" type="submit">Сохранить настройки</button>
@@ -35,6 +44,47 @@
           <a id="open-smartup" target="_blank" rel="noopener noreferrer" hidden>Открыть Smartup</a>
         </div>
         <p class="muted" id="settings-message" role="status" aria-live="polite">Настройки сохраняются на этом компьютере. Авторизация и ЭЦП выполняются отдельно.</p>
+        <details class="reference-details"><summary>Справочники и дополнительные поля JSON</summary>
+          <p class="muted">«loading_point», «drivers», «destinations» по ИНН покупателя, «distances» по ключу маршрута. Содержимое остаётся на этом компьютере.</p>
+          <textarea id="reference-json" rows="12" spellcheck="false" aria-label="JSON справочников"></textarea>
+        </details>
+      </form>
+      <div class="settings-actions">
+        <button id="load-catalogs" type="button" class="secondary">Загрузить регионы, районы и склады Didox</button>
+        <label class="file-label" for="drivers-file">Загрузить справочник водителей CSV<input id="drivers-file" type="file" accept=".csv"></label>
+      </div>
+      <details class="reference-details"><summary>Получить список водителей из Smartup</summary>
+        <p class="muted">Собираются «ФИО экспедитора» и «код автомобиля» из архивных заказов за период до семи дней. Госномер, модель и ПИНФЛ дополните здесь; ранее сохранённые значения подставятся автоматически.</p>
+        <div class="settings-grid">
+          <label for="drivers-from">«Дата заказов Smartup с»<input id="drivers-from" type="date"></label>
+          <label for="drivers-to">«Дата заказов Smartup по»<input id="drivers-to" type="date"></label>
+        </div>
+        <div class="settings-actions"><button id="get-drivers" type="button" class="secondary">Получить водителей из Smartup</button>
+          <button id="save-drivers" type="button" class="secondary" disabled>Сохранить заполненных водителей</button>
+          <button id="download-drivers" type="button" class="text-button" disabled>Скачать этот список CSV</button></div>
+        <p id="drivers-message" class="muted" role="status"></p>
+        <div id="drivers-table" class="table-wrapper"></div>
+      </details>
+    </details>
+
+    <details class="settings-card" id="connection-card" open>
+      <summary>Вход в Didox и Smartup</summary>
+      <form id="connection-form" autocomplete="off">
+        <div class="settings-grid">
+          <label for="didox-partner">«Партнёрский токен Didox»<input id="didox-partner" type="password" autocomplete="off"></label>
+          <label for="didox-login-method">«Способ входа Didox»<select id="didox-login-method"><option value="password">Пароль</option><option value="token">Токен пользователя</option><option value="eimzo">ЭЦП E-IMZO</option></select></label>
+          <label for="didox-login-tax">«ИНН/ПИНФЛ для входа», если отличается от организации<input id="didox-login-tax" type="text" inputmode="numeric" maxlength="14"></label>
+          <label for="didox-secret">«Пароль / токен пользователя Didox»<input id="didox-secret" type="password" autocomplete="off"></label>
+          <label for="smartup-login">«Логин Smartup»<input id="smartup-login" type="text" autocomplete="off"></label>
+          <label for="smartup-password">«Пароль Smartup»<input id="smartup-password" type="password" autocomplete="off"></label>
+          <label for="eimzo-key">«Ключ ЭЦП»<select id="eimzo-key"><option value="">Сначала загрузите ключи</option></select></label>
+        </div>
+        <div class="settings-actions">
+          <button id="connect-systems" class="primary" type="submit">Войти и проверить доступы</button>
+          <button id="load-keys" class="secondary" type="button">Загрузить ключи E-IMZO</button>
+          <button id="disconnect-systems" class="text-button" type="button">Завершить сеанс</button>
+        </div>
+        <p id="connection-message" class="muted" role="status">Первую проверку сделайте на одной СФ, затем выберите две–три строки для пакета.</p>
       </form>
     </details>
 
@@ -48,8 +98,25 @@
         <button id="choose-file" type="button" class="primary">Загрузить Excel или CSV</button>
         <span class="muted">Можно перетащить файл сюда. До 15 МБ.</span>
         <a href="/api/template" download="sf_upload_template.xlsx">Скачать пустой шаблон Excel</a>
+        <a href="/api/example" download="sf_example_DEMO.xlsx">Скачать пример Excel — 3 тестовые СФ</a>
       </div>
     </section>
+
+    <details class="settings-card" id="didox-search-card">
+      <summary>Или получить список СФ из Didox по фильтрам</summary>
+      <p class="muted" id="search-company">Исходящие СФ текущей организации Didox. После поиска отметьте нужные строки; получение списка ничего не создаёт.</p>
+      <form id="didox-search-form">
+        <div class="settings-grid">
+          <label for="invoice-from">«Дата СФ с»<input id="invoice-from" type="date" required></label>
+          <label for="invoice-to">«Дата СФ по»<input id="invoice-to" type="date" required></label>
+          <label for="invoice-partner">«ИНН покупателя», необязательно<input id="invoice-partner" type="text" inputmode="numeric" maxlength="14"></label>
+          <label for="invoice-status">«Статус СФ в Didox»<select id="invoice-status"><option value="3">Подписан</option><option value="1">Ожидает подписи партнёра</option><option value="2">Ожидает вашей подписи</option><option value="0">Черновик</option><option value="4">Отказ от подписи</option><option value="6">Ожидает подписи агента</option><option value="8">Подписан агентом</option><option value="40">Недействительный</option></select></label>
+        </div>
+        <div class="settings-actions"><button id="search-invoices" type="submit" class="primary">Получить список из Didox</button>
+          <button id="more-invoices" type="button" class="secondary" disabled>Загрузить ещё 50 СФ</button></div>
+        <p id="search-message" class="muted" role="status">Поиск заменит текущий список в окне. Выбранные СФ можно скачать в Excel кнопкой «Скачать выбранный список».</p>
+      </form>
+    </details>
 
     <div id="message" role="status" aria-live="polite" hidden></div>
     <section id="sheet-picker" class="sheet-picker" hidden>
@@ -95,12 +162,26 @@
       <div class="export-actions">
         <button id="export-report" type="button" class="secondary" disabled>Скачать отчёт</button>
         <button id="export-list" type="button" class="secondary" disabled>Скачать выбранный список</button>
-        <button type="button" class="primary" disabled title="Потребуется подключение Didox и Smartup">Создать черновики ТТН</button>
+        <button id="prepare-one" type="button" class="secondary" disabled>Подготовить 1 СФ</button>
+        <button id="prepare-selected" type="button" class="primary" disabled>Подготовить выбранные СФ</button>
       </div>
     </section>
 
-    <aside class="mode-note"><strong>Сейчас доступна подготовка списка.</strong>
-      Загрузка и исправление строк работают локально. Создание ТТН станет доступно после подключения Didox и Smartup.</aside>
+    <section class="list-card integration-card" aria-labelledby="ttn-title">
+      <div class="list-heading"><div><h2 id="ttn-title">Подготовленные ТТН и результаты</h2><p class="muted">Одна строка или пакет: результат и ошибка сохраняются отдельно для каждой СФ.</p></div>
+        <button id="refresh-jobs" class="secondary" type="button">Обновить журнал</button></div>
+      <p class="integration-note">Перед созданием проверьте адреса, водителя, единицы массы и расстояние. Официальная привязка к уже существующей СФ требует проверки в вашем Didox; локальный журнал хранит обе записи.</p>
+      <div id="prepare-results" role="status" aria-live="polite"></div>
+      <div id="ttn-jobs" class="ttn-jobs"><p class="muted">Подготовьте выбранные СФ или откройте сохранённый журнал.</p></div>
+      <div class="review-confirm"><label><input id="reviewed" type="checkbox"> Данные и способ привязки ТТН к СФ проверены</label></div>
+      <div class="export-actions">
+        <button id="create-drafts" class="primary" type="button" disabled>Создать выбранные черновики</button>
+        <button id="sign-drafts" class="secondary" type="button" disabled>Подписать и отправить выбранные</button>
+        <a href="/api/integration/report" download="ttn_processing_report.csv">Скачать отчёт обработки ТТН</a>
+      </div>
+    </section>
+    <aside class="mode-note"><strong>Сначала одна СФ, затем пакет.</strong>
+      Подготовка не создаёт документов. Создание черновиков и подпись выполняются отдельными кнопками. Проверка на реальных аккаунтах ещё не проводилась.</aside>
     <footer>Исходный файл остаётся без изменений. Отчёт сохраняется отдельно. Исправления в окне можно сохранить кнопкой «Скачать выбранный список».</footer>
   </main>
 </body>

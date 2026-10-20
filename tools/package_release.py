@@ -6,14 +6,15 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE = "ttn-processor-0.1.1"
+RELEASE = "ttn-processor-0.2.0"
 FILES = (
     ".gitignore", "README.md", "README.txt", "RUNBOOK.txt", "HANDOFF.md", "INTEGRATION.md",
     "examples/README.md", "examples/sf_demo.csv",
-    "app.py", "invoice_processor.py", "settings.py", "start.cmd", "check.cmd",
-    "config.example.json", "web/index.html", "web/styles.css", "web/app.js",
+    "examples/integration_one.csv", "examples/integration_three.csv", "examples/drivers_template.csv",
+    "app.py", "invoice_processor.py", "settings.py", "connectors.py", "workflow.py", "start.cmd", "check.cmd",
+    "config.example.json", "web/index.html", "web/styles.css", "web/app.js", "web/integration.js",
     "templates/sf_upload_template.xlsx", "tests/test_processor.py",
-    "tests/test_http.py", "tests/test_settings.py", "tools/package_release.py",
+    "tests/test_http.py", "tests/test_settings.py", "tests/test_integration.py", "tools/package_release.py", "tools/demo_integration.py",
 )
 
 

@@ -1,7 +1,16 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "didox_url": "https://didox.uz/",
   "smartup_url": "",
   "company_tin": "",
-  "loading_address": ""
+  "loading_address": "",
+  "didox_api_url": "https://api-partners.didox.uz",
+  "smartup_api_url": "https://smartup.online",
+  "smartup_project_code": "trade",
+  "smartup_filial_id": "",
+  "smartup_filial_code": "",
+  "loading_point": {},
+  "drivers": [],
+  "destinations": {},
+  "distances": {}
 }

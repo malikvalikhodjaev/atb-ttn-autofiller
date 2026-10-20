@@ -36,7 +36,7 @@ class HttpTests(unittest.TestCase):
             connection.close()
 
     def test_page_assets_and_template(self):
-        for path in ("/", "/app.js", "/styles.css", "/api/template"):
+        for path in ("/", "/app.js", "/integration.js", "/styles.css", "/api/template"):
             status, headers, body = self.request("GET", path)
             self.assertEqual(status, 200)
             self.assertTrue(body)

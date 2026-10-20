@@ -13,13 +13,16 @@ from urllib.parse import parse_qs, urlsplit
 
 from invoice_processor import MAX_UPLOAD_BYTES, ProcessingError, export_csv, export_selected_xlsx, import_invoices, validate_rows
 from settings import SettingsError, load_settings, save_settings
+from connectors import IntegrationError, json_bytes
+from workflow import Workflow, read_drivers
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 STATIC = {
     "/": (ROOT / "web" / "index.html", "text/html; charset=utf-8"),
     "/app.js": (ROOT / "web" / "app.js", "text/javascript; charset=utf-8"),
+    "/integration.js": (ROOT / "web" / "integration.js", "text/javascript; charset=utf-8"),
     "/styles.css": (ROOT / "web" / "styles.css", "text/css; charset=utf-8"),
     "/api/template": (ROOT / "templates" / "sf_upload_template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
 }
@@ -33,14 +36,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send(self, status, data, content_type="application/json; charset=utf-8", filename=None):
         if isinstance(data, dict):
-            data = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
+            data = json_bytes(data)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' wss://127.0.0.1:64443; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         if filename:
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.end_headers()
@@ -63,12 +66,36 @@ class Handler(BaseHTTPRequestHandler):
             return
         route = urlsplit(self.path).path
         if route == "/api/status":
-            self._send(200, {"version": VERSION, "mode": "local", "didox_connected": False, "smartup_connected": False, "can_create_ttn": False})
+            try:
+                self._send(200, {"version": VERSION, "mode": "local", **self.server.workflow.status()})
+            except SettingsError as exc:
+                self._send(400, {"error": str(exc)})
+        elif route == "/api/integration/jobs":
+            try:
+                self._send(200, {"jobs": self.server.workflow.jobs()})
+            except (SettingsError, IntegrationError) as exc:
+                self._send(400, {"error": str(exc)})
+        elif route in ("/api/integration/report", "/api/integration/pdf"):
+            try:
+                if route.endswith("/report"):
+                    self._send(200, self.server.workflow.export_report(), "text/csv; charset=utf-8", "ttn_processing_report.csv")
+                else:
+                    job_id = parse_qs(urlsplit(self.path).query).get("job_id", [""])[0]
+                    self._send(200, self.server.workflow.pdf(job_id), "application/pdf")
+            except (IntegrationError, SettingsError) as exc:
+                self._send(400, {"error": str(exc)})
         elif route == "/api/settings":
             try:
                 self._send(200, {"settings": load_settings(self.server.settings_path)})
             except SettingsError as exc:
                 self._send(400, {"error": str(exc)})
+        elif route == "/api/example":
+            try:
+                sample = import_invoices((ROOT / "examples" / "integration_three.csv").read_bytes(), "integration_three.csv")
+                content = export_selected_xlsx(sample["rows"], [row["record_id"] for row in sample["rows"]], (ROOT / "templates" / "sf_upload_template.xlsx").read_bytes())
+                self._send(200, content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sf_example_DEMO.xlsx")
+            except (OSError, ProcessingError):
+                self._send(400, {"error": "Не найден пример. Распакуйте весь архив программы."})
         elif route == "/favicon.ico":
             self._send(204, b"", "image/x-icon")
         elif route in STATIC:
@@ -95,20 +122,29 @@ class Handler(BaseHTTPRequestHandler):
             if len(raw) != length:
                 raise ProcessingError("Загрузка файла не завершена. Повторите её.")
             route = urlsplit(self.path)
-            if route.path == "/api/import":
+            if route.path == "/api/integration/drivers":
+                with self.server.workflow.lock:
+                    settings = load_settings(self.server.settings_path)
+                    settings["drivers"] = read_drivers(raw)
+                    saved = save_settings(self.server.settings_path, settings)
+                self._send(200, {"count": len(saved["drivers"]), "settings": saved})
+            elif route.path == "/api/import":
                 params = parse_qs(route.query)
                 filename = params.get("filename", [""])[0]
                 sheet = params.get("sheet", [None])[0]
                 self._send(200, import_invoices(raw, filename, sheet))
-            elif route.path in ("/api/validate", "/api/export", "/api/settings"):
+            elif route.path in ("/api/validate", "/api/export", "/api/settings") or route.path.startswith("/api/integration/"):
                 try:
                     payload = json.loads(raw.decode("utf-8"), parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
                 except (ValueError, UnicodeDecodeError) as exc:
                     raise ProcessingError("Некорректные данные списка.") from exc
                 if not isinstance(payload, dict):
                     raise ProcessingError("Некорректный формат запроса.")
-                if route.path == "/api/settings":
-                    self._send(200, {"settings": save_settings(self.server.settings_path, payload.get("settings"))})
+                if route.path.startswith("/api/integration/"):
+                    self._integration(route.path, payload)
+                elif route.path == "/api/settings":
+                    with self.server.workflow.lock:
+                        self._send(200, {"settings": save_settings(self.server.settings_path, payload.get("settings"))})
                 elif route.path == "/api/validate":
                     self._send(200, validate_rows(payload.get("rows")))
                 else:
@@ -129,18 +165,56 @@ class Handler(BaseHTTPRequestHandler):
                         self._send(200, content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sf_selected_list.xlsx")
             else:
                 self._send(404, {"error": "Действие не найдено."})
-        except (ProcessingError, SettingsError) as exc:
+        except (ProcessingError, SettingsError, IntegrationError) as exc:
             self._send(400, {"error": str(exc), "sheets": getattr(exc, "sheets", [])})
         except (TimeoutError, ConnectionError):
             return
         except Exception:
             self._send(500, {"error": "Не удалось обработать файл. Проверьте формат и повторите загрузку."})
 
+    def _integration(self, route, payload):
+        service = self.server.workflow
+        if route == "/api/integration/connect":
+            result = service.connect(payload.get("credentials"))
+        elif route == "/api/integration/disconnect":
+            result = service.disconnect()
+        elif route == "/api/integration/prepare":
+            result = {"results": service.prepare(payload.get("rows"), payload.get("selected_ids"), order_id=payload.get("order_id", ""))}
+        elif route == "/api/integration/search-invoices":
+            result = service.search_invoices(payload.get("filters"))
+        elif route == "/api/integration/driver-candidates":
+            result = service.driver_candidates(payload.get("date_from"), payload.get("date_to"))
+        elif route == "/api/integration/save-drivers":
+            result = service.save_drivers(payload.get("drivers"))
+        elif route == "/api/integration/edit":
+            result = {"job": service.edit(payload.get("job_id"), payload.get("payload"))}
+        elif route == "/api/integration/save-references":
+            result = service.save_references(payload.get("job_id"))
+        elif route == "/api/integration/create":
+            result = {"results": service.create(payload.get("job_ids"), reviewed=payload.get("reviewed"))}
+        elif route == "/api/integration/reconcile":
+            result = {"job": service.reconcile(payload.get("job_id"), payload.get("waybill_id"))}
+        elif route == "/api/integration/confirm-absent":
+            result = {"job": service.confirm_absent(payload.get("job_id"), payload.get("checked"))}
+        elif route == "/api/integration/sign-data":
+            result = service.signing_data(payload.get("job_id"))
+        elif route == "/api/integration/sign":
+            result = {"job": service.sign(payload.get("job_id"), payload.get("challenge"), payload.get("pkcs7"), payload.get("signature_hex"))}
+        elif route == "/api/integration/auth-timestamp":
+            result = {"signature": service.auth_timestamp(payload.get("partner_token"), payload.get("pkcs7"), payload.get("signature_hex"))}
+        elif route == "/api/integration/catalogs":
+            result = service.catalogs()
+        else:
+            self._send(404, {"error": "Операция не найдена."})
+            return
+        self._send(200, result)
 
-def make_server(port=8765, settings_path=None):
+
+def make_server(port=8765, settings_path=None, workflow=None):
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
     server.settings_path = Path(settings_path) if settings_path is not None else ROOT / "config.local.json"
+    server.workflow = workflow or Workflow(server.settings_path)
     return server
 
 
@@ -167,7 +241,7 @@ def check_installation(settings_path):
         failures.append(str(exc))
     for failure in failures:
         print("ОШИБКА: " + failure)
-    print("Интеграция Didox/Smartup и создание ТТН ещё требуют реализации.")
+    print("Код интеграции доступен. Реальные соединения, права, поля и ЭЦП проверьте на одной СФ перед пакетом.")
     return 1 if failures else 0
 
 
